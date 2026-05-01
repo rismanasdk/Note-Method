@@ -2,6 +2,7 @@
   const storageKey = 'method-catatan-items'
 
   const createEmptyForm = () => ({
+    tipeData: '',
     namaMethod: '',
     deskripsi: '',
     caraPenggunaan: '',
@@ -10,6 +11,7 @@
   const initialItems = [
     {
       id: crypto.randomUUID(),
+      tipeData: 'Array',
       namaMethod: 'Array.map()',
       deskripsi: 'Membuat array baru dari hasil transformasi setiap item pada array asal.',
       caraPenggunaan:
@@ -58,12 +60,13 @@
 
   const submitForm = () => {
     const payload = {
+      tipeData: form.tipeData.trim(),
       namaMethod: form.namaMethod.trim(),
       deskripsi: form.deskripsi.trim(),
       caraPenggunaan: form.caraPenggunaan.trim(),
     }
 
-    if (!payload.namaMethod || !payload.deskripsi || !payload.caraPenggunaan) {
+    if (!payload.tipeData || !payload.namaMethod || !payload.deskripsi || !payload.caraPenggunaan) {
       window.alert('Semua field wajib diisi.')
       return
     }
@@ -96,6 +99,7 @@
   const startEdit = (item) => {
     editingId = item.id
     form = {
+      tipeData: item.tipeData,
       namaMethod: item.namaMethod,
       deskripsi: item.deskripsi,
       caraPenggunaan: item.caraPenggunaan,
@@ -145,6 +149,7 @@
         (item, index) => `
           <article class="print-card">
             <div class="print-number">Method ${index + 1}</div>
+            <h2>${escapeHtml(item.tipeData)}</h2>
             <h2>${escapeHtml(item.namaMethod)}</h2>
             <section>
               <h3>Deskripsi</h3>
@@ -330,9 +335,9 @@
       <label class="field">
         <span>Tipe Data</span>
         <input
-          bind:value={form.namaMethod}
+          bind:value={form.tipeData}
           type="text"
-          name="namaMethod"
+          name="tipeData"
           placeholder="Contoh: Int atau String"
         />
       </label>
@@ -390,6 +395,10 @@
           {#each items as item}
             <article class="method-card">
               <div class="card-head">
+                <div>
+                  <p class="card-label">Tipe Data</p>
+                  <h3>{item.tipeData}</h3>
+                </div>
                 <div>
                   <p class="card-label">Nama Method</p>
                   <h3>{item.namaMethod}</h3>
