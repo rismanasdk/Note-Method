@@ -1,5 +1,8 @@
 <script>
+  import { onMount } from 'svelte'
+
   const storageKey = 'method-catatan-items'
+  const themeKey = 'method-catatan-theme'
 
   const createEmptyForm = () => ({
     dataType: '',
@@ -41,16 +44,35 @@
     }
   }
 
+  const getPreferredTheme = () => {
+    if (typeof window === 'undefined') {
+      return 'light'
+    }
+
+    const savedTheme = window.localStorage.getItem(themeKey)
+
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme
+    }
+
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+
   let items = loadItems()
   let form = createEmptyForm()
   let editingId = null
   let isFormModalOpen = false
   let deleteTargetId = null
+  let theme = getPreferredTheme()
   let alertState = {
     status: 'info',
     title: '',
     description: '',
   }
+
+  onMount(() => {
+    applyTheme(theme)
+  })
 
   const syncItems = (nextItems) => {
     items = nextItems
@@ -62,6 +84,22 @@
 
   const showAlert = (status, title, description) => {
     alertState = { status, title, description }
+  }
+
+  const applyTheme = (nextTheme) => {
+    theme = nextTheme
+
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = nextTheme
+    }
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(themeKey, nextTheme)
+    }
+  }
+
+  const toggleTheme = () => {
+    applyTheme(theme === 'light' ? 'dark' : 'light')
   }
 
   const clearAlert = () => {
@@ -334,6 +372,9 @@
     </div>
 
     <div class="hero-actions">
+      <button class="theme-button" type="button" on:click={toggleTheme}>
+        {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+      </button>
       <button class="primary-button" type="button" on:click={openCreateModal}>Add Method</button>
       <button class="secondary-button" type="button" on:click={exportToPdf}>Export PDF</button>
     </div>
@@ -370,8 +411,12 @@
       <strong>{items.length}</strong>
     </article>
     <article class="stats-card">
-      <span>Current Mode</span>
+      <span>Current View</span>
       <strong>{isFormModalOpen ? (editingId ? 'Editing' : 'Creating') : 'Browsing'}</strong>
+    </article>
+    <article class="stats-card">
+      <span>Theme</span>
+      <strong>{theme === 'light' ? 'Light' : 'Dark'}</strong>
     </article>
   </section>
 
