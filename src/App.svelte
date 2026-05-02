@@ -3,6 +3,7 @@
 
   const storageKey = 'method-catatan-items'
   const themeKey = 'method-catatan-theme'
+  const itemsPerPage = 9
 
   const createEmptyForm = () => ({
     programmingLanguage: '',
@@ -74,6 +75,13 @@
   let tableItemId = null
   let detailItem = null
   let tableItem = null
+  let searchQuery = ''
+  let selectedLanguage = 'all'
+  let selectedDataType = 'all'
+  let currentPage = 1
+  let filteredItems = []
+  let paginatedItems = []
+  let totalPages = 1
   let theme = getPreferredTheme()
   let alertState = {
     status: 'info',
@@ -87,6 +95,27 @@
 
   $: detailItem = items.find((item) => item.id === detailItemId) ?? null
   $: tableItem = items.find((item) => item.id === tableItemId) ?? null
+  $: languageOptions = [...new Set(items.map((item) => item.programmingLanguage))].sort()
+  $: dataTypeOptions = [...new Set(items.map((item) => item.dataType))].sort()
+  $: filteredItems = items.filter((item) => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+    const matchesQuery =
+      !normalizedQuery ||
+      item.methodName.toLowerCase().includes(normalizedQuery) ||
+      item.programmingLanguage.toLowerCase().includes(normalizedQuery) ||
+      item.dataType.toLowerCase().includes(normalizedQuery) ||
+      item.description.toLowerCase().includes(normalizedQuery) ||
+      item.usage.toLowerCase().includes(normalizedQuery)
+
+    const matchesLanguage =
+      selectedLanguage === 'all' || item.programmingLanguage === selectedLanguage
+    const matchesDataType = selectedDataType === 'all' || item.dataType === selectedDataType
+
+    return matchesQuery && matchesLanguage && matchesDataType
+  })
+  $: totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage))
+  $: currentPage = Math.min(currentPage, totalPages)
+  $: paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   const syncItems = (nextItems) => {
     items = nextItems.map(normalizeItem)
@@ -114,6 +143,21 @@
 
   const toggleTheme = () => {
     applyTheme(theme === 'light' ? 'dark' : 'light')
+  }
+
+  const resetPagination = () => {
+    currentPage = 1
+  }
+
+  const clearFilters = () => {
+    searchQuery = ''
+    selectedLanguage = 'all'
+    selectedDataType = 'all'
+    resetPagination()
+  }
+
+  const goToPage = (page) => {
+    currentPage = page
   }
 
   const clearAlert = () => {
@@ -481,53 +525,147 @@
       <span>Languages</span>
       <strong>{new Set(items.map((item) => item.programmingLanguage)).size}</strong>
     </article>
+    <article class="stats-card">
+      <span>Filtered Results</span>
+      <strong>{filteredItems.length}</strong>
+    </article>
   </section>
 
   {#if items.length}
-    <section class="cards-grid">
-      {#each items as item}
-        <article class="method-card">
-          <div
-            class="card-surface"
-            role="button"
-            tabindex="0"
-            aria-label={`Open details for ${item.methodName}`}
-            on:click={() => openDetailModal(item)}
-            on:keydown={(event) => handleCardKeydown(event, item)}
-          >
-            <div class="card-top">
-              <div>
-                <p class="card-label">Programming Language</p>
-                <h2>{item.programmingLanguage}</h2>
-              </div>
-              <span class="timestamp">{formatDate(item.createdAt)}</span>
-            </div>
+    <section class="filter-card">
+      <div class="filter-heading">
+        <div>
+          <p class="eyebrow">Filter & Pagination</p>
+          <h2>Find methods faster when the list grows</h2>
+        </div>
+        <button class="theme-button" type="button" on:click={clearFilters}>Clear Filters</button>
+      </div>
 
-            <div class="card-section">
-              <p class="card-label">Method Name</p>
-              <h3>{item.methodName}</h3>
-            </div>
+      <div class="filter-grid">
+        <label class="field">
+          <span>Search</span>
+          <input
+            bind:value={searchQuery}
+            type="text"
+            name="searchQuery"
+            placeholder="Search by method, language, data type, or keyword..."
+            on:input={resetPagination}
+          />
+        </label>
 
-            <div class="card-section card-section--split">
-              <div>
-                <p class="card-label">Data Type</p>
-                <p class="pill-text">{item.dataType}</p>
-              </div>
-              <div>
-                <p class="card-label">Description</p>
-                <p>{item.description}</p>
-              </div>
-            </div>
-          </div>
+        <label class="field">
+          <span>Programming Language</span>
+          <select bind:value={selectedLanguage} name="selectedLanguage" on:change={resetPagination}>
+            <option value="all">All languages</option>
+            {#each languageOptions as language}
+              <option value={language}>{language}</option>
+            {/each}
+          </select>
+        </label>
 
-          <div class="card-actions">
-            <button class="secondary-button" type="button" on:click={() => openDetailModal(item)}>View</button>
-            <button class="ghost-button" type="button" on:click={() => openEditModal(item)}>Edit</button>
-            <button class="danger-button" type="button" on:click={() => askDelete(item.id)}>Delete</button>
-          </div>
-        </article>
-      {/each}
+        <label class="field">
+          <span>Data Type</span>
+          <select bind:value={selectedDataType} name="selectedDataType" on:change={resetPagination}>
+            <option value="all">All data types</option>
+            {#each dataTypeOptions as dataType}
+              <option value={dataType}>{dataType}</option>
+            {/each}
+          </select>
+        </label>
+      </div>
+
+      <div class="pagination-summary">
+        <p>Showing {paginatedItems.length} of {filteredItems.length} filtered methods.</p>
+        <p>Page {currentPage} of {totalPages} with a maximum of 9 cards per page.</p>
+      </div>
     </section>
+
+    {#if filteredItems.length}
+      <section class="cards-grid">
+        {#each paginatedItems as item}
+          <article class="method-card">
+            <div
+              class="card-surface"
+              role="button"
+              tabindex="0"
+              aria-label={`Open details for ${item.methodName}`}
+              on:click={() => openDetailModal(item)}
+              on:keydown={(event) => handleCardKeydown(event, item)}
+            >
+              <div class="card-top">
+                <div>
+                  <p class="card-label">Programming Language</p>
+                  <h2>{item.programmingLanguage}</h2>
+                </div>
+                <span class="timestamp">{formatDate(item.createdAt)}</span>
+              </div>
+
+              <div class="card-section">
+                <p class="card-label">Method Name</p>
+                <h3>{item.methodName}</h3>
+              </div>
+
+              <div class="card-section card-section--split">
+                <div>
+                  <p class="card-label">Data Type</p>
+                  <p class="pill-text">{item.dataType}</p>
+                </div>
+                <div>
+                  <p class="card-label">Description</p>
+                  <p>{item.description}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-actions">
+              <button class="secondary-button" type="button" on:click={() => openDetailModal(item)}>View</button>
+              <button class="ghost-button" type="button" on:click={() => openEditModal(item)}>Edit</button>
+              <button class="danger-button" type="button" on:click={() => askDelete(item.id)}>Delete</button>
+            </div>
+          </article>
+        {/each}
+      </section>
+
+      <nav class="pagination-bar" aria-label="Method pagination">
+        <button
+          class="secondary-button"
+          type="button"
+          on:click={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+        >
+          Previous
+        </button>
+
+        <div class="pagination-pages">
+          {#each Array(totalPages) as _, index}
+            <button
+              class:pagination-button={true}
+              class:pagination-button--active={currentPage === index + 1}
+              type="button"
+              on:click={() => goToPage(index + 1)}
+              aria-current={currentPage === index + 1 ? 'page' : undefined}
+            >
+              {index + 1}
+            </button>
+          {/each}
+        </div>
+
+        <button
+          class="secondary-button"
+          type="button"
+          on:click={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+        >
+          Next
+        </button>
+      </nav>
+    {:else}
+      <section class="empty-card">
+        <h2>No matching methods found</h2>
+        <p>Try changing the search text or reset the filters to see more results.</p>
+        <button class="primary-button" type="button" on:click={clearFilters}>Reset Filters</button>
+      </section>
+    {/if}
   {:else}
     <section class="empty-card">
       <h2>No methods saved yet</h2>
