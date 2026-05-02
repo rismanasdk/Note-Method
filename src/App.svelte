@@ -5,6 +5,7 @@
   const themeKey = 'method-catatan-theme'
 
   const createEmptyForm = () => ({
+    programmingLanguage: '',
     dataType: '',
     methodName: '',
     description: '',
@@ -14,6 +15,7 @@
   const initialItems = [
     {
       id: crypto.randomUUID(),
+      programmingLanguage: 'JavaScript',
       dataType: 'Array',
       methodName: 'Array.map()',
       description: 'Creates a new array by transforming every item from the source array.',
@@ -37,12 +39,17 @@
 
     try {
       const parsedItems = JSON.parse(savedItems)
-      return Array.isArray(parsedItems) ? parsedItems : initialItems
+      return Array.isArray(parsedItems) ? parsedItems.map(normalizeItem) : initialItems
     } catch (error) {
       window.localStorage.setItem(storageKey, JSON.stringify(initialItems))
       return initialItems
     }
   }
+
+  const normalizeItem = (item) => ({
+    ...item,
+    programmingLanguage: item.programmingLanguage || 'JavaScript',
+  })
 
   const getPreferredTheme = () => {
     if (typeof window === 'undefined') {
@@ -63,6 +70,10 @@
   let editingId = null
   let isFormModalOpen = false
   let deleteTargetId = null
+  let detailItemId = null
+  let tableItemId = null
+  let detailItem = null
+  let tableItem = null
   let theme = getPreferredTheme()
   let alertState = {
     status: 'info',
@@ -74,11 +85,14 @@
     applyTheme(theme)
   })
 
+  $: detailItem = items.find((item) => item.id === detailItemId) ?? null
+  $: tableItem = items.find((item) => item.id === tableItemId) ?? null
+
   const syncItems = (nextItems) => {
-    items = nextItems
+    items = nextItems.map(normalizeItem)
 
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(storageKey, JSON.stringify(nextItems))
+      window.localStorage.setItem(storageKey, JSON.stringify(items))
     }
   }
 
@@ -124,6 +138,7 @@
   const openEditModal = (item) => {
     editingId = item.id
     form = {
+      programmingLanguage: item.programmingLanguage,
       dataType: item.dataType,
       methodName: item.methodName,
       description: item.description,
@@ -140,13 +155,20 @@
 
   const submitForm = () => {
     const payload = {
+      programmingLanguage: form.programmingLanguage.trim(),
       dataType: form.dataType.trim(),
       methodName: form.methodName.trim(),
       description: form.description.trim(),
       usage: form.usage.trim(),
     }
 
-    if (!payload.dataType || !payload.methodName || !payload.description || !payload.usage) {
+    if (
+      !payload.programmingLanguage ||
+      !payload.dataType ||
+      !payload.methodName ||
+      !payload.description ||
+      !payload.usage
+    ) {
       showAlert('error', 'Incomplete form', 'Please fill in every field before saving.')
       return
     }
@@ -180,6 +202,32 @@
     closeFormModal()
   }
 
+  const openDetailModal = (item) => {
+    detailItemId = item.id
+  }
+
+  const closeDetailModal = () => {
+    detailItemId = null
+  }
+
+  const openTableModal = (item) => {
+    tableItemId = item.id
+  }
+
+  const closeTableModal = () => {
+    tableItemId = null
+  }
+
+  const openEditFromDetail = (item) => {
+    closeDetailModal()
+    openEditModal(item)
+  }
+
+  const askDeleteFromDetail = (id) => {
+    closeDetailModal()
+    askDelete(id)
+  }
+
   const askDelete = (id) => {
     deleteTargetId = id
     clearAlert()
@@ -200,6 +248,8 @@
     syncItems(items.filter((item) => item.id !== deleteTargetId))
     showAlert('success', 'Method deleted', `"${targetItem.methodName}" was removed successfully.`)
     closeDeleteModal()
+    closeDetailModal()
+    closeTableModal()
 
     if (editingId === deleteTargetId) {
       closeFormModal()
@@ -233,6 +283,7 @@
         (item, index) => `
           <tr>
             <td>${index + 1}</td>
+            <td>${escapeHtml(item.programmingLanguage)}</td>
             <td>${escapeHtml(item.dataType)}</td>
             <td>${escapeHtml(item.methodName)}</td>
             <td>${escapeHtml(item.description).replace(/\n/g, '<br>')}</td>
@@ -314,6 +365,7 @@
               <thead>
                 <tr>
                   <th>No.</th>
+                  <th>Programming Language</th>
                   <th>Data Type</th>
                   <th>Method Name</th>
                   <th>Description</th>
@@ -342,6 +394,13 @@
     })
 
   const getDeleteTarget = () => items.find((item) => item.id === deleteTargetId)
+
+  const handleCardKeydown = (event, item) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openDetailModal(item)
+    }
+  }
 
   const escapeHtml = (value) =>
     value
@@ -418,36 +477,51 @@
       <span>Theme</span>
       <strong>{theme === 'light' ? 'Light' : 'Dark'}</strong>
     </article>
+    <article class="stats-card">
+      <span>Languages</span>
+      <strong>{new Set(items.map((item) => item.programmingLanguage)).size}</strong>
+    </article>
   </section>
 
   {#if items.length}
     <section class="cards-grid">
       {#each items as item}
         <article class="method-card">
-          <div class="card-top">
-            <div>
-              <p class="card-label">Data Type</p>
-              <h2>{item.dataType}</h2>
+          <div
+            class="card-surface"
+            role="button"
+            tabindex="0"
+            aria-label={`Open details for ${item.methodName}`}
+            on:click={() => openDetailModal(item)}
+            on:keydown={(event) => handleCardKeydown(event, item)}
+          >
+            <div class="card-top">
+              <div>
+                <p class="card-label">Programming Language</p>
+                <h2>{item.programmingLanguage}</h2>
+              </div>
+              <span class="timestamp">{formatDate(item.createdAt)}</span>
             </div>
-            <span class="timestamp">{formatDate(item.createdAt)}</span>
-          </div>
 
-          <div class="card-section">
-            <p class="card-label">Method Name</p>
-            <h3>{item.methodName}</h3>
-          </div>
+            <div class="card-section">
+              <p class="card-label">Method Name</p>
+              <h3>{item.methodName}</h3>
+            </div>
 
-          <div class="card-section">
-            <p class="card-label">Description</p>
-            <p>{item.description}</p>
-          </div>
-
-          <div class="card-section">
-            <p class="card-label">Usage</p>
-            <p>{item.usage}</p>
+            <div class="card-section card-section--split">
+              <div>
+                <p class="card-label">Data Type</p>
+                <p class="pill-text">{item.dataType}</p>
+              </div>
+              <div>
+                <p class="card-label">Description</p>
+                <p>{item.description}</p>
+              </div>
+            </div>
           </div>
 
           <div class="card-actions">
+            <button class="secondary-button" type="button" on:click={() => openDetailModal(item)}>View</button>
             <button class="ghost-button" type="button" on:click={() => openEditModal(item)}>Edit</button>
             <button class="danger-button" type="button" on:click={() => askDelete(item.id)}>Delete</button>
           </div>
@@ -484,6 +558,16 @@
         </div>
 
         <form class="modal-form" on:submit|preventDefault={submitForm}>
+          <label class="field">
+            <span>Programming Language</span>
+            <input
+              bind:value={form.programmingLanguage}
+              type="text"
+              name="programmingLanguage"
+              placeholder="Example: JavaScript"
+            />
+          </label>
+
           <label class="field">
             <span>Data Type</span>
             <input bind:value={form.dataType} type="text" name="dataType" placeholder="Example: String" />
@@ -526,6 +610,116 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  {/if}
+
+  {#if detailItemId}
+    <div class="modal-backdrop" role="presentation" on:click={closeDetailModal}>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-modal-title"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+        tabindex="-1"
+      >
+        {#if detailItem}
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Method Details</p>
+              <h2 id="detail-modal-title">{detailItem.methodName}</h2>
+            </div>
+            <button class="icon-button" type="button" on:click={closeDetailModal} aria-label="Close detail dialog">
+              ×
+            </button>
+          </div>
+
+          <div class="detail-layout">
+            <div class="detail-card">
+              <p class="card-label">Programming Language</p>
+              <strong>{detailItem.programmingLanguage}</strong>
+            </div>
+
+            <button class="detail-card detail-card--button" type="button" on:click={() => openTableModal(detailItem)}>
+              <p class="card-label">Data Type</p>
+              <strong>{detailItem.dataType}</strong>
+              <span>Open structured table view</span>
+            </button>
+          </div>
+
+          <div class="detail-block">
+            <p class="card-label">Description</p>
+            <p>{detailItem.description}</p>
+          </div>
+
+          <div class="detail-block">
+            <p class="card-label">Usage</p>
+            <p>{detailItem.usage}</p>
+          </div>
+
+          <div class="modal-actions">
+            <button class="secondary-button" type="button" on:click={() => openTableModal(detailItem)}>
+              Open Table View
+            </button>
+            <button class="ghost-button" type="button" on:click={() => openEditFromDetail(detailItem)}>
+              Edit
+            </button>
+            <button class="danger-button" type="button" on:click={() => askDeleteFromDetail(detailItem.id)}>
+              Delete
+            </button>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  {#if tableItemId}
+    <div class="modal-backdrop" role="presentation" on:click={closeTableModal}>
+      <div
+        class="modal-card modal-card--table"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="table-modal-title"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+        tabindex="-1"
+      >
+        {#if tableItem}
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Structured Table View</p>
+              <h2 id="table-modal-title">{tableItem.dataType}</h2>
+            </div>
+            <button class="icon-button" type="button" on:click={closeTableModal} aria-label="Close table dialog">
+              ×
+            </button>
+          </div>
+
+          <div class="table-shell">
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  <th>Method Name</th>
+                  <th>Programming Language</th>
+                  <th>Data Type</th>
+                  <th>Description</th>
+                  <th>Usage</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>{tableItem.methodName}</td>
+                  <td>{tableItem.programmingLanguage}</td>
+                  <td>{tableItem.dataType}</td>
+                  <td>{tableItem.description}</td>
+                  <td>{tableItem.usage}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {/if}
       </div>
     </div>
   {/if}
