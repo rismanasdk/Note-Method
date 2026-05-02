@@ -2,20 +2,20 @@
   const storageKey = 'method-catatan-items'
 
   const createEmptyForm = () => ({
-    tipeData: '',
-    namaMethod: '',
-    deskripsi: '',
-    caraPenggunaan: '',
+    dataType: '',
+    methodName: '',
+    description: '',
+    usage: '',
   })
 
   const initialItems = [
     {
       id: crypto.randomUUID(),
-      tipeData: 'Array',
-      namaMethod: 'Array.map()',
-      deskripsi: 'Membuat array baru dari hasil transformasi setiap item pada array asal.',
-      caraPenggunaan:
-        'Gunakan ketika ingin mengubah isi array tanpa memodifikasi array aslinya, misalnya mengubah daftar angka menjadi string.',
+      dataType: 'Array',
+      methodName: 'Array.map()',
+      description: 'Creates a new array by transforming every item from the source array.',
+      usage:
+        'Use it when you need to return a transformed version of an array without mutating the original data.',
       createdAt: new Date().toISOString(),
     },
   ]
@@ -44,6 +44,13 @@
   let items = loadItems()
   let form = createEmptyForm()
   let editingId = null
+  let isFormModalOpen = false
+  let deleteTargetId = null
+  let alertState = {
+    status: 'info',
+    title: '',
+    description: '',
+  }
 
   const syncItems = (nextItems) => {
     items = nextItems
@@ -53,21 +60,56 @@
     }
   }
 
+  const showAlert = (status, title, description) => {
+    alertState = { status, title, description }
+  }
+
+  const clearAlert = () => {
+    alertState = {
+      status: 'info',
+      title: '',
+      description: '',
+    }
+  }
+
   const resetForm = () => {
     form = createEmptyForm()
     editingId = null
   }
 
+  const openCreateModal = () => {
+    resetForm()
+    clearAlert()
+    isFormModalOpen = true
+  }
+
+  const openEditModal = (item) => {
+    editingId = item.id
+    form = {
+      dataType: item.dataType,
+      methodName: item.methodName,
+      description: item.description,
+      usage: item.usage,
+    }
+    clearAlert()
+    isFormModalOpen = true
+  }
+
+  const closeFormModal = () => {
+    isFormModalOpen = false
+    resetForm()
+  }
+
   const submitForm = () => {
     const payload = {
-      tipeData: form.tipeData.trim(),
-      namaMethod: form.namaMethod.trim(),
-      deskripsi: form.deskripsi.trim(),
-      caraPenggunaan: form.caraPenggunaan.trim(),
+      dataType: form.dataType.trim(),
+      methodName: form.methodName.trim(),
+      description: form.description.trim(),
+      usage: form.usage.trim(),
     }
 
-    if (!payload.tipeData || !payload.namaMethod || !payload.deskripsi || !payload.caraPenggunaan) {
-      window.alert('Semua field wajib diisi.')
+    if (!payload.dataType || !payload.methodName || !payload.description || !payload.usage) {
+      showAlert('error', 'Incomplete form', 'Please fill in every field before saving.')
       return
     }
 
@@ -82,6 +124,8 @@
             : item,
         ),
       )
+
+      showAlert('success', 'Method updated', `"${payload.methodName}" was updated successfully.`)
     } else {
       syncItems([
         {
@@ -91,184 +135,155 @@
         },
         ...items,
       ])
+
+      showAlert('success', 'Method saved', `"${payload.methodName}" was added to your collection.`)
     }
 
-    resetForm()
+    closeFormModal()
   }
 
-  const startEdit = (item) => {
-    editingId = item.id
-    form = {
-      tipeData: item.tipeData,
-      namaMethod: item.namaMethod,
-      deskripsi: item.deskripsi,
-      caraPenggunaan: item.caraPenggunaan,
-    }
+  const askDelete = (id) => {
+    deleteTargetId = id
+    clearAlert()
   }
 
-  const deleteItem = (id) => {
-    const targetItem = items.find((item) => item.id === id)
+  const closeDeleteModal = () => {
+    deleteTargetId = null
+  }
+
+  const confirmDelete = () => {
+    const targetItem = items.find((item) => item.id === deleteTargetId)
 
     if (!targetItem) {
+      closeDeleteModal()
       return
     }
 
-    const confirmed = window.confirm(`Hapus "${targetItem.namaMethod}"?`)
+    syncItems(items.filter((item) => item.id !== deleteTargetId))
+    showAlert('success', 'Method deleted', `"${targetItem.methodName}" was removed successfully.`)
+    closeDeleteModal()
 
-    if (!confirmed) {
-      return
-    }
-
-    syncItems(items.filter((item) => item.id !== id))
-
-    if (editingId === id) {
-      resetForm()
+    if (editingId === deleteTargetId) {
+      closeFormModal()
     }
   }
 
   const exportToPdf = () => {
     if (!items.length) {
-      window.alert('Belum ada data yang bisa diexport.')
+      showAlert('warning', 'Nothing to export', 'Add at least one method before exporting to PDF.')
       return
     }
 
     const printWindow = window.open('', '_blank', 'width=960,height=720')
 
     if (!printWindow) {
-      window.alert('Popup diblokir browser. Izinkan popup lalu coba lagi.')
+      showAlert(
+        'error',
+        'Popup blocked',
+        'Please allow popups in your browser and try exporting again.',
+      )
       return
     }
 
-    const exportedAt = new Date().toLocaleString('id-ID', {
+    const exportedAt = new Date().toLocaleString('en-US', {
       dateStyle: 'full',
       timeStyle: 'short',
     })
 
-    const cards = items
+    const rows = items
       .map(
         (item, index) => `
-          <article class="print-card">
-            <div class="print-number">Method ${index + 1}</div>
-            <h2>${escapeHtml(item.tipeData)}</h2>
-            <h2>${escapeHtml(item.namaMethod)}</h2>
-            <section>
-              <h3>Deskripsi</h3>
-              <p>${escapeHtml(item.deskripsi).replace(/\n/g, '<br>')}</p>
-            </section>
-            <section>
-              <h3>Cara Penggunaan</h3>
-              <p>${escapeHtml(item.caraPenggunaan).replace(/\n/g, '<br>')}</p>
-            </section>
-          </article>
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.dataType)}</td>
+            <td>${escapeHtml(item.methodName)}</td>
+            <td>${escapeHtml(item.description).replace(/\n/g, '<br>')}</td>
+            <td>${escapeHtml(item.usage).replace(/\n/g, '<br>')}</td>
+          </tr>
         `,
       )
       .join('')
 
     printWindow.document.write(`
       <!doctype html>
-      <html lang="id">
+      <html lang="en">
         <head>
           <meta charset="UTF-8" />
-          <title>Export Method Catatan</title>
+          <title>Method Notes Export</title>
           <style>
-            :root {
-              color-scheme: light;
-              font-family: Arial, Helvetica, sans-serif;
-            }
-
             * {
               box-sizing: border-box;
             }
 
             body {
               margin: 0;
-              padding: 40px;
-              color: #111827;
-              background: #f8fafc;
+              padding: 32px;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #000000;
+              background: #ffffff;
             }
 
             .print-shell {
-              max-width: 960px;
+              max-width: 1120px;
               margin: 0 auto;
             }
 
-            .print-header {
-              margin-bottom: 28px;
-              padding: 24px 28px;
-              border-radius: 20px;
-              background: linear-gradient(135deg, #111827, #1f2937 60%, #374151);
-              color: #f9fafb;
-            }
-
-            .print-header h1 {
+            h1 {
               margin: 0 0 8px;
               font-size: 28px;
             }
 
-            .print-header p {
-              margin: 0;
-              color: #d1d5db;
-              line-height: 1.6;
+            p {
+              margin: 0 0 6px;
+              font-size: 14px;
             }
 
-            .print-list {
-              display: grid;
-              gap: 18px;
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 24px;
             }
 
-            .print-card {
-              padding: 24px 28px;
-              border-radius: 18px;
+            th,
+            td {
+              border: 1px solid #000000;
+              padding: 10px;
+              text-align: left;
+              vertical-align: top;
+              font-size: 13px;
+              line-height: 1.5;
+            }
+
+            th {
               background: #ffffff;
-              border: 1px solid #dbe4f0;
-              break-inside: avoid;
-              page-break-inside: avoid;
-            }
-
-            .print-number,
-            .print-card h3 {
-              font-size: 12px;
-              letter-spacing: 0.12em;
-              text-transform: uppercase;
-              color: #475569;
-            }
-
-            .print-card h2 {
-              margin: 10px 0 18px;
-              font-size: 24px;
-              color: #0f172a;
-            }
-
-            .print-card section + section {
-              margin-top: 18px;
-            }
-
-            .print-card h3 {
-              margin: 0 0 8px;
-            }
-
-            .print-card p {
-              margin: 0;
-              line-height: 1.7;
-              color: #334155;
+              font-weight: 700;
             }
 
             @media print {
               body {
                 padding: 0;
-                background: #ffffff;
               }
             }
           </style>
         </head>
         <body>
           <main class="print-shell">
-            <header class="print-header">
-              <h1>Method Catatan</h1>
-              <p>Dicetak pada ${escapeHtml(exportedAt)}.</p>
-              <p>Total method: ${items.length}</p>
-            </header>
-            <section class="print-list">${cards}</section>
+            <h1>Method Notes</h1>
+            <p>Exported at: ${escapeHtml(exportedAt)}</p>
+            <p>Total methods: ${items.length}</p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Data Type</th>
+                  <th>Method Name</th>
+                  <th>Description</th>
+                  <th>Usage</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
           </main>
           <script>
             window.onload = () => {
@@ -279,7 +294,16 @@
       </html>
     `)
     printWindow.document.close()
+    showAlert('success', 'PDF ready', 'The printable PDF view has been opened in a new window.')
   }
+
+  const formatDate = (value) =>
+    new Date(value).toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
+
+  const getDeleteTarget = () => items.find((item) => item.id === deleteTargetId)
 
   const escapeHtml = (value) =>
     value
@@ -291,146 +315,206 @@
 </script>
 
 <svelte:head>
-  <title>Method Catatan</title>
+  <title>Method Notes</title>
   <meta
     name="description"
-    content="CRUD basic untuk mencatat nama method, deskripsi, dan cara penggunaan."
+    content="A simple CRUD app for saving method names, descriptions, and usage notes."
   />
 </svelte:head>
 
 <main class="page-shell">
-  <section class="hero-panel">
+  <section class="hero-card">
     <div class="hero-copy">
-      <p class="eyebrow">CRUD Basic</p>
-      <h1>Catat method penting dan export isinya ke PDF.</h1>
+      <p class="eyebrow">Method Manager</p>
+      <h1>Save your favorite methods in clean cards and export them as a plain PDF table.</h1>
       <p class="lead">
-        Data disimpan langsung di browser tanpa database. Cocok buat catatan cepat soal
-        method, fungsi, atau snippet yang sering dipakai.
+        Everything is stored in your browser, so you can quickly manage method references without
+        setting up a database.
       </p>
     </div>
-    <div class="hero-stats">
-      <div class="stat-card">
-        <span>Total Catatan</span>
-        <strong>{items.length}</strong>
-      </div>
-      <div class="stat-card">
-        <span>Status Form</span>
-        <strong>{editingId ? 'Edit Mode' : 'Tambah Baru'}</strong>
-      </div>
+
+    <div class="hero-actions">
+      <button class="primary-button" type="button" on:click={openCreateModal}>Add Method</button>
+      <button class="secondary-button" type="button" on:click={exportToPdf}>Export PDF</button>
     </div>
   </section>
 
-  <section class="content-grid">
-    <form class="editor-panel" on:submit|preventDefault={submitForm}>
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">Form Input</p>
-          <h2>{editingId ? 'Edit Method' : 'Tambah Method'}</h2>
-        </div>
-        {#if editingId}
-          <button class="ghost-button" type="button" on:click={resetForm}>Batal Edit</button>
+  {#if alertState.title}
+    <section class={`chakra-alert chakra-alert--${alertState.status}`} role="alert" aria-live="polite">
+      <div class="chakra-alert__icon" aria-hidden="true">
+        {#if alertState.status === 'success'}
+          ✓
+        {:else if alertState.status === 'error'}
+          !
+        {:else if alertState.status === 'warning'}
+          !
+        {:else}
+          i
         {/if}
       </div>
 
-      <label class="field">
-        <span>Tipe Data</span>
-        <input
-          bind:value={form.tipeData}
-          type="text"
-          name="tipeData"
-          placeholder="Contoh: Int atau String"
-        />
-      </label>
-
-      <label class="field">
-        <span>Nama Method</span>
-        <input
-          bind:value={form.namaMethod}
-          type="text"
-          name="namaMethod"
-          placeholder="Contoh: String.includes()"
-        />
-      </label>
-
-      <label class="field">
-        <span>Deskripsi</span>
-        <textarea
-          bind:value={form.deskripsi}
-          name="deskripsi"
-          rows="4"
-          placeholder="Jelaskan fungsi method ini secara singkat..."
-        ></textarea>
-      </label>
-
-      <label class="field">
-        <span>Cara Penggunaan</span>
-        <textarea
-          bind:value={form.caraPenggunaan}
-          name="caraPenggunaan"
-          rows="5"
-          placeholder="Tuliskan kapan dipakai atau contoh cara menggunakannya..."
-        ></textarea>
-      </label>
-
-      <div class="form-actions">
-        <button class="primary-button" type="submit">
-          {editingId ? 'Update Method' : 'Simpan Method'}
-        </button>
-        <button class="secondary-button" type="button" on:click={exportToPdf}>
-          Export ke PDF
-        </button>
-      </div>
-    </form>
-
-    <section class="list-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="eyebrow">Daftar Method</p>
-          <h2>Semua Catatan</h2>
-        </div>
+      <div class="chakra-alert__content">
+        <strong>{alertState.title}</strong>
+        <p>{alertState.description}</p>
       </div>
 
-      {#if items.length}
-        <div class="method-list">
-          {#each items as item}
-            <article class="method-card">
-              <div class="card-head">
-                <div>
-                  <p class="card-label">Tipe Data</p>
-                  <h3>{item.tipeData}</h3>
-                </div>
-                <div>
-                  <p class="card-label">Nama Method</p>
-                  <h3>{item.namaMethod}</h3>
-                </div>
-                <div class="card-actions">
-                  <button class="ghost-button" type="button" on:click={() => startEdit(item)}>
-                    Edit
-                  </button>
-                  <button class="danger-button" type="button" on:click={() => deleteItem(item.id)}>
-                    Hapus
-                  </button>
-                </div>
-              </div>
-
-              <div class="card-body">
-                <div>
-                  <p class="card-label">Deskripsi</p>
-                  <p>{item.deskripsi}</p>
-                </div>
-                <div>
-                  <p class="card-label">Cara Penggunaan</p>
-                  <p>{item.caraPenggunaan}</p>
-                </div>
-              </div>
-            </article>
-          {/each}
-        </div>
-      {:else}
-        <div class="empty-state">
-          <p>Belum ada catatan method. Isi form di sebelah kiri untuk mulai menambahkan data.</p>
-        </div>
-      {/if}
+      <button class="alert-close" type="button" on:click={clearAlert} aria-label="Close alert">
+        ×
+      </button>
     </section>
+  {/if}
+
+  <section class="stats-grid">
+    <article class="stats-card">
+      <span>Total Methods</span>
+      <strong>{items.length}</strong>
+    </article>
+    <article class="stats-card">
+      <span>Current Mode</span>
+      <strong>{isFormModalOpen ? (editingId ? 'Editing' : 'Creating') : 'Browsing'}</strong>
+    </article>
   </section>
+
+  {#if items.length}
+    <section class="cards-grid">
+      {#each items as item}
+        <article class="method-card">
+          <div class="card-top">
+            <div>
+              <p class="card-label">Data Type</p>
+              <h2>{item.dataType}</h2>
+            </div>
+            <span class="timestamp">{formatDate(item.createdAt)}</span>
+          </div>
+
+          <div class="card-section">
+            <p class="card-label">Method Name</p>
+            <h3>{item.methodName}</h3>
+          </div>
+
+          <div class="card-section">
+            <p class="card-label">Description</p>
+            <p>{item.description}</p>
+          </div>
+
+          <div class="card-section">
+            <p class="card-label">Usage</p>
+            <p>{item.usage}</p>
+          </div>
+
+          <div class="card-actions">
+            <button class="ghost-button" type="button" on:click={() => openEditModal(item)}>Edit</button>
+            <button class="danger-button" type="button" on:click={() => askDelete(item.id)}>Delete</button>
+          </div>
+        </article>
+      {/each}
+    </section>
+  {:else}
+    <section class="empty-card">
+      <h2>No methods saved yet</h2>
+      <p>Open the popup form to create your first method note.</p>
+      <button class="primary-button" type="button" on:click={openCreateModal}>Create First Method</button>
+    </section>
+  {/if}
+
+  {#if isFormModalOpen}
+    <div class="modal-backdrop" role="presentation" on:click={closeFormModal}>
+      <div
+        class="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="method-modal-title"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">{editingId ? 'Edit Method' : 'New Method'}</p>
+            <h2 id="method-modal-title">{editingId ? 'Update method details' : 'Create a new method note'}</h2>
+          </div>
+          <button class="icon-button" type="button" on:click={closeFormModal} aria-label="Close form">
+            ×
+          </button>
+        </div>
+
+        <form class="modal-form" on:submit|preventDefault={submitForm}>
+          <label class="field">
+            <span>Data Type</span>
+            <input bind:value={form.dataType} type="text" name="dataType" placeholder="Example: String" />
+          </label>
+
+          <label class="field">
+            <span>Method Name</span>
+            <input
+              bind:value={form.methodName}
+              type="text"
+              name="methodName"
+              placeholder="Example: String.includes()"
+            />
+          </label>
+
+          <label class="field">
+            <span>Description</span>
+            <textarea
+              bind:value={form.description}
+              name="description"
+              rows="4"
+              placeholder="Write a short explanation of what this method does..."
+            ></textarea>
+          </label>
+
+          <label class="field">
+            <span>Usage</span>
+            <textarea
+              bind:value={form.usage}
+              name="usage"
+              rows="5"
+              placeholder="Explain when to use it or add a practical example..."
+            ></textarea>
+          </label>
+
+          <div class="modal-actions">
+            <button class="secondary-button" type="button" on:click={closeFormModal}>Cancel</button>
+            <button class="primary-button" type="submit">
+              {editingId ? 'Save Changes' : 'Save Method'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  {#if deleteTargetId}
+    <div class="modal-backdrop" role="presentation" on:click={closeDeleteModal}>
+      <div
+        class="modal-card modal-card--compact"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-modal-title"
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Delete Method</p>
+            <h2 id="delete-modal-title">Remove this method?</h2>
+          </div>
+          <button class="icon-button" type="button" on:click={closeDeleteModal} aria-label="Close delete dialog">
+            ×
+          </button>
+        </div>
+
+        <p class="dialog-copy">
+          "{getDeleteTarget()?.methodName}" will be permanently removed from your saved methods.
+        </p>
+
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" on:click={closeDeleteModal}>Cancel</button>
+          <button class="danger-button" type="button" on:click={confirmDelete}>Delete Method</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
