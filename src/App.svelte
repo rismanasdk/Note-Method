@@ -4,7 +4,6 @@
   const storageKey = 'method-catatan-items'
   const themeKey = 'method-catatan-theme'
   const itemsPerPage = 9
-
   const createEmptyForm = () => ({
     programmingLanguage: '',
     dataType: '',
